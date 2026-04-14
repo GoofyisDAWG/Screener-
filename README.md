@@ -1,153 +1,100 @@
-# Goofy Screener — Multi-Market Quant Strategy System
+# Goofy Screener v2 — Automated Single-Market Strategy Screener
 
-A quantitative trading research project built from scratch in Python.  
-Five strategies individually backtested, then combined into an automated screener that runs across **117 assets across US, ASX, and JPX markets** — picking the best strategy per asset and ranking by risk-adjusted performance.
+A quantitative trading screener that automatically runs **5 backtested strategies** across any stock universe, selects the best strategy per asset using in-sample optimisation, and validates performance on out-of-sample data the model never saw.
 
-> **Core finding:** Strategy-asset fit matters more than the strategy itself. The same strategy that produces a Sharpe of 0.87 on one stock produces -0.21 on another. The screener exists to find which combination actually works — and proves it on data the model never saw.
+> **Core idea:** Given any list of assets, automatically find which quant strategy fits each one best — and prove it on data the model was never trained on.
 
 ---
 
-## Project Structure
+## What It Does
+
+1. Downloads live price data via Yahoo Finance
+2. Splits into **train (2016–2020)** and **test (2021–present)**
+3. Grid searches all strategies and parameter combinations on training data only
+4. Selects the best strategy per asset by in-sample Sharpe ratio
+5. Locks parameters and applies to out-of-sample test data
+6. Compares strategy vs Buy & Hold on return, Sharpe, and max drawdown
+7. Exports a colour-coded Excel report
+
+---
+
+## Files
 
 ```
-├── Goofy MA for 6 assets.ipynb             — Strategy 1: MA Crossover
-├── Goofy8 RSI for 6 assets.ipynb           — Strategy 2: RSI
-├── Goofy BB for 6 assets.ipynb             — Strategy 3: Bollinger Bands
-├── Goofy MACD for 6 assets.ipynb           — Strategy 4: MACD
-├── Goofy Mean Reversion for 6 assets.ipynb — Strategy 5: Mean Reversion
-├── goofy_screener_daily.py                 — Automated daily screener (Phase 3)
-├── screener_output/                        — Excel reports (auto-generated)
+├── Goofy Screener v2.ipynb     — Interactive Jupyter notebook (run this)
+├── goofy_screener_daily.py     — Standalone Python script version
+├── screener_output/            — Excel reports (auto-generated, gitignored)
 └── README.md
 ```
 
 ---
 
-## Methodology
+## The 5 Strategies
 
-All strategies share the same validation framework:
+| Strategy | Logic | Best Fit |
+|---|---|---|
+| MA Crossover | Short MA > Long MA → long | Smooth trending assets, broad ETFs |
+| RSI | Buy oversold, sell overbought | Stable dividend stocks, banks |
+| Bollinger Bands | Buy below lower band, sell at midline | Range-bound, mean-reverting assets |
+| MACD | MACD line > signal line → long | Growth stocks, hybrid momentum |
+| Mean Reversion | Z-score < −threshold → long, exit at 0 | Sideways markets only |
+
+---
+
+## Methodology
 
 | | Detail |
 |---|---|
 | **Train period** | Jan 2016 → Dec 2020 (in-sample) |
 | **Test period** | Jan 2021 → present (out-of-sample) |
-| **Parameter selection** | Grid search on training data only — locked before testing |
+| **Parameter selection** | Grid search on training data only — parameters locked before testing |
 | **Signal execution** | `.shift(1)` on all signals — zero lookahead bias |
-| **Sharpe ratio** | Annualised return ÷ annualised volatility |
+| **Sharpe ratio** | Annualised log return ÷ annualised volatility |
 | **Max drawdown** | Peak-to-trough on cumulative equity curve |
 | **Benchmark** | Buy & Hold (passive holding of the same asset) |
 
-Parameters are chosen on historical data only, then frozen and applied to future data the model never saw. This is the core of the methodology — what separates genuine signal from overfitting.
+---
+
+## Asset Universes
+
+Change the `UNIVERSE` variable in the notebook to switch markets:
+
+| Universe | Assets | Examples |
+|---|---|---|
+| `"ASX"` | 23 stocks | CBA.AX, BHP.AX, CSL.AX, XRO.AX, IOZ.AX |
+| `"US"` | 22 stocks | NVDA, SPY, AAPL, JPM, GLD, QQQ |
+| `"CUSTOM"` | Your own list | Edit the `CUSTOM_UNIVERSE` list |
 
 ---
 
-## The 5 Strategies
+## Output — Excel Report
 
-### 1 — Moving Average Crossover
-Goes long when the fast MA crosses above the slow MA; exits on the reverse. Pure trend-following.  
-**Best fit:** SPY, broad indices, macro ETFs  
-**Worst fit:** Mean-reverting stocks (generates whipsaws)
+Each run saves `screener_output/Goofy_Screener_YYYY-MM-DD.xlsx` with:
 
-### 2 — RSI (Relative Strength Index)
-Buys on oversold dips, sells on overbought spikes. Captures momentum extremes.  
-**Best fit:** CBA.AX, NAB.AX, stable dividend stocks  
-**Worst fit:** NVDA-style trending assets (kept triggering premature sells during the AI bull run)
-
-### 3 — Bollinger Bands
-Buys when price breaks below the lower band (2σ); sells at the upper band. Volatility-adjusted mean reversion.  
-**Best fit:** Sony (6758.T) — the only strategy-asset pair to beat Buy & Hold out-of-sample in the entire project  
-**Worst fit:** NVDA (negative Sharpe OOS — parabolic trends never mean-revert to a 20-day average)
-
-### 4 — MACD
-Goes long when MACD crosses above its signal line. Hybrid momentum + trend.  
-**Best fit:** NVDA, trending US growth stocks, Japanese financials  
-**Standout:** NVDA is the only asset where OOS Sharpe *exceeded* in-sample (0.94 → 1.03)
-
-### 5 — Mean Reversion (Z-Score)
-Goes long when price drops N standard deviations below its rolling mean; exits at mean.  
-**Best fit:** Sideways / range-bound markets  
-**Key limitation:** Structurally underperforms in bull markets — 2021–2026 was the wrong regime for this strategy
-
----
-
-## Phase 3 Screener — 117 Assets, 3 Markets
-
-**File:** `goofy_screener_daily.py`
-
-The screener automates all 5 strategies into a single pipeline across three global markets:
-
-1. Downloads live price data via Yahoo Finance
-2. Splits into train (2016–2020) and test (2021–present)
-3. Grid searches all strategies and parameters on training data only
-4. Selects the best strategy per asset by in-sample Sharpe
-5. Applies that strategy to out-of-sample data — data the model never touched
-6. Scores each asset by a weighted formula: Sharpe, return, drawdown protection
-7. Assigns tiers and exports a colour-coded Excel report
-
-### Asset Universe
-
-| Market | Count | Examples |
-|--------|-------|---------|
-| 🇺🇸 US | ~40 | NVDA, TSLA, AAPL, JPM, XOM, GLD, SPY |
-| 🇦🇺 ASX | ~37 | CBA.AX, BHP.AX, CSL.AX, WTC.AX, STW.AX |
-| 🇯🇵 JPX | ~40 | 7203.T, 6758.T, 8306.T, 9984.T, 8725.T |
-
-### Tier System
-
-| Tier | Criteria |
-|------|---------|
-| ⭐ S — Excellent | Sharpe ≥ 0.8, Return ≥ 30%, Max DD ≥ -20% |
-| ✅ A — Good | Sharpe ≥ 0.4, Return ≥ 10%, Max DD ≥ -35% |
-| 🔵 B — Decent | Sharpe ≥ 0.1, Max DD ≥ -50% |
-| ⬜ Skip | Below all thresholds |
-
-### Latest Results (Run: 2026-04-12)
-
-**117 assets screened | 12 S-tier | 30 A-tier | 22 assets beat Buy & Hold**
-
-**Top 5 by Out-of-Sample Sharpe:**
-
-| Rank | Market | Asset | Strategy | OUT Sharpe | Tier |
-|------|--------|-------|---------|-----------|------|
-| 1 | JPX | 8725.T | RSI | 1.306 | ⭐ S |
-| 2 | JPX | 8002.T | MA Crossover | 1.276 | 🔵 B |
-| 3 | JPX | 9434.T | Bollinger Bands | 1.151 | ✅ A |
-| 4 | US | COP | RSI | 1.121 | ✅ A |
-| 5 | JPX | 7011.T | MACD | 1.104 | ✅ A |
-
-**Strategy distribution across 117 assets:**
-
-| Strategy | Count |
-|----------|-------|
-| MA Crossover | 34 |
-| MACD | 27 |
-| RSI | 24 |
-| Bollinger Bands | 22 |
-| Mean Reversion | 10 |
-
-### Why only 22/117 beat Buy & Hold — and why that's honest
-
-2021–2026 was a strong bull market. In sustained uptrends, passive holding wins on raw return because rule-based strategies move to cash during corrections and miss part of the recovery. This is not a failure — it is an accurate reflection of what quant strategies do in trending markets.
-
-The real value is **drawdown protection**. Top assets show strategy drawdowns of -10% to -25% while the same assets held passively experienced -30% to -75% drops over the same period. For risk-conscious investors, a strategy that earns less but caps the worst drop at -15% is genuinely useful.
+| Column | What it means |
+|---|---|
+| Best Strategy | Strategy with highest in-sample Sharpe |
+| Train Sharpe | Sharpe on 2016–2020 data (used for selection) |
+| OUT Sharpe | Sharpe on 2021–present data (real performance) |
+| OUT Strat Ret % | Total return of strategy in test period |
+| OUT B&H Ret % | Total return of buy & hold in test period |
+| OUT Strat Max DD % | Strategy's worst peak-to-trough drop |
+| OUT B&H Max DD % | Buy & hold's worst peak-to-trough drop |
+| DD Saved % | How much drawdown the strategy avoided vs holding |
+| Beats B&H | Whether strategy beat buy & hold on raw return |
 
 ---
 
 ## Key Findings
 
-**1. Strategy-asset fit is everything.**  
-Sony beat Buy & Hold with Bollinger Bands (Sharpe 0.87) but failed with MACD (Sharpe 0.31). Same asset, wrong strategy.
+**Strategy-asset fit matters more than the strategy itself.**
+The same MACD strategy produces a Sharpe of 1.03 on NVDA and 0.31 on Sony. The same Bollinger Bands strategy produces 0.87 on Sony and −0.12 on NVDA. The screener exists to find the right match.
 
-**2. Out-of-sample validation is non-negotiable.**  
-Sony's Mean Reversion in-sample Sharpe was 1.34 — the highest single result in the whole project. Out-of-sample it fell to 0.41. Without the train/test split that looks like the best strategy in the study. It isn't.
+**Out-of-sample is everything.**
+Sony's Mean Reversion in-sample Sharpe was 1.34 — the highest result in the entire project. Out-of-sample it dropped to 0.41. Without the train/test split that looks like the best strategy. It isn't.
 
-**3. Regime determines performance.**  
-Mean Reversion underperformed across the board because 2021–2026 was trending. The same strategies in a sideways market would tell a completely different story.
-
-**4. Japanese markets showed the strongest signals.**  
-JPX financials (8725.T, 8411.T, 8750.T, 8306.T) dominated the top Sharpe rankings. Japanese bank stocks have cleaner oscillation patterns that suit RSI and MACD well.
-
-**5. Sharpe matters more than raw return.**  
-CBA's RSI strategy returned +52.7% with Sharpe 0.99 and max drawdown -11%. Buy & Hold returned +167% but with -35% drawdown. Which is better depends entirely on risk tolerance.
+**Why most strategies don't beat Buy & Hold on return — and why that's honest.**
+2021–2026 was a strong bull market. Passive holding wins on raw return in sustained uptrends. The real value of these strategies is drawdown protection — capping worst-case losses to −10%/−20% while Buy & Hold drops −30%/−70% over the same period.
 
 ---
 
@@ -155,36 +102,50 @@ CBA's RSI strategy returned +52.7% with Sharpe 0.99 and max drawdown -11%. Buy &
 
 ### Requirements
 ```bash
-pip install yfinance pandas numpy openpyxl
+pip install yfinance pandas numpy openpyxl matplotlib
 ```
 
-### Run the screener
+### Jupyter (recommended)
+Open `Goofy Screener v2.ipynb` in Anaconda/Jupyter and run cells top to bottom.
+
+### Command line
 ```bash
+# Run ASX universe (default)
 python goofy_screener_daily.py
+
+# Change UNIVERSE in the script to "US" or "CUSTOM" before running
 ```
-
-Output saved to `screener_output/Goofy_Phase3_YYYY-MM-DD.xlsx`
-
-### Individual strategy notebooks
-Open any `.ipynb` file in Jupyter. Each notebook is self-contained with its own data download, backtest, and charts.
 
 ---
 
 ## Honest Limitations
 
-- **No transaction costs.** Brokerage and slippage would reduce returns, especially for high-frequency strategies.
-- **Sharpe without risk-free rate.** Subtracting cash rates (~4–5%) would reduce headline Sharpe by roughly 0.3–0.5.
-- **Multiple comparisons.** Selecting the best of 5 strategies introduces selection bias even with a proper train/test split.
+- **No transaction costs.** Brokerage and slippage would reduce returns, especially for frequent traders.
+- **Sharpe without risk-free rate.** Subtracting cash rates (~4–5%) would reduce Sharpe by roughly 0.3–0.5.
 - **Long-only.** All strategies are long or flat. No short selling.
-- **No portfolio construction.** No correlation analysis or position sizing across assets.
+- **No position sizing.** Each trade is 100% in or 100% out — no volatility scaling.
+- **No portfolio construction.** Assets are screened individually with no correlation analysis.
+
+---
+
+## Part of a Larger Project
+
+This screener is built on top of **5 individually backtested strategies** — each one built and validated before being combined here:
+
+- [Moving Average Crossover Backtest](https://github.com/GoofyisDAWG/Moving-Average-crossover-backtest)
+- [RSI Backtest](https://github.com/GoofyisDAWG/RSI-Backtest-)
+- [Bollinger Bands Backtest](https://github.com/GoofyisDAWG/Bollinger-Bands-backtest)
+- [MACD Backtest](https://github.com/GoofyisDAWG/MACD-backtest)
+
+**Next step → [Phase 3: Multi-Market Screener (US + ASX + JPX)](https://github.com/GoofyisDAWG)** — adds Japan, composite scoring, and tier ranking.
 
 ---
 
 ## Disclaimer
 
-This project is for educational and research purposes only. All backtested results are historical simulations and do not guarantee future performance. Nothing in this repository constitutes financial advice.
+For educational and research purposes only. All results are historical backtests and do not guarantee future performance. Nothing here constitutes financial advice.
 
 ---
 
 *Built by Hiroki Kunu — International Finance, University of Queensland*  
-*GitHub: [GoofyisDAWG](https://github.com/GoofyisDAWG) | LinkedIn: [Hiroki Kunu](https://www.linkedin.com/in/hiroki-kunu-ba4218401)*
+*[GitHub: GoofyisDAWG](https://github.com/GoofyisDAWG) | [LinkedIn](https://www.linkedin.com/in/hiroki-kunu-ba4218401)*
